@@ -1,0 +1,198 @@
+services:
+
+  # ─── PHP-FPM ────────────────────────────────────────────────────────────────
+  php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: dev
+    volumes:
+      - .:/var/www/html:cached
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/99-custom.ini:ro
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      DATABASE_URL: ${DATABASE_URL}
+      MESSENGER_TRANSPORT_DSN: ${MESSENGER_TRANSPORT_DSN}
+      REDIS_URL: ${REDIS_URL}
+      OPENSEARCH_DSN: ${OPENSEARCH_DSN}
+      MAILER_DSN: ${MAILER_DSN}
+      JWT_PASSPHRASE: ${JWT_PASSPHRASE}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - oimp_network
+    healthcheck:
+      test: ["CMD", "php-fpm", "-t"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ─── NGINX ──────────────────────────────────────────────────────────────────
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    volumes:
+      - ./public:/var/www/html/public:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - php
+    networks:
+      - oimp_network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ─── MESSENGER WORKER ───────────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: worker
+    volumes:
+      - .:/var/www/html:cached
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      DATABASE_URL: ${DATABASE_URL}
+      MESSENGER_TRANSPORT_DSN: ${MESSENGER_TRANSPORT_DSN}
+      REDIS_URL: ${REDIS_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - oimp_network
+    restart: unless-stopped
+
+  # ─── POSTGRESQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: oimp
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - oimp_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d oimp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── REDIS ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - oimp_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── RABBITMQ ───────────────────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_VHOST: /
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    networks:
+      - oimp_network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── OPENSEARCH ─────────────────────────────────────────────────────────────
+  opensearch:
+    image: opensearchproject/opensearch:2.14.0
+    environment:
+      cluster.name: oimp-cluster
+      node.name: oimp-node-01
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      DISABLE_SECURITY_PLUGIN: "true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
+    networks:
+      - oimp_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\\|yellow\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ─── OPENSEARCH DASHBOARDS ──────────────────────────────────────────────────
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.14.0
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    ports:
+      - "${OPENSEARCH_DASHBOARDS_PORT:-5601}:5601"
+    depends_on:
+      - opensearch
+    networks:
+      - oimp_network
+    profiles:
+      - dashboards
+
+  # ─── MAILHOG ────────────────────────────────────────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"
+      - "${MAILHOG_UI_PORT:-8025}:8025"
+    networks:
+      - oimp_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  opensearch_data:
+    driver: local
+
+networks:
+  oimp_network:
+    driver: bridge
