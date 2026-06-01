@@ -1,0 +1,44 @@
+api_platform:
+    title: 'OIMP Platform API'
+    description: |
+        **Order & Inventory Management Platform**
+
+        Production-grade SaaS B2B system for managing orders, inventory, products and customers.
+    version: '1.0.0'
+    formats:
+        jsonld:
+            mime_types: ['application/ld+json']
+        json:
+            mime_types: ['application/json']
+        jsonhal:
+            mime_types: ['application/hal+json']
+    docs_formats:
+        jsonld:
+            mime_types: ['application/ld+json']
+        jsonopenapi:
+            mime_types: ['application/vnd.openapi+json']
+        html:
+            mime_types: ['text/html']
+    patch_formats:
+        json:
+            mime_types: ['application/merge-patch+json']
+    defaults:
+        pagination_enabled: true
+        pagination_items_per_page: 25
+        pagination_maximum_items_per_page: 100
+        pagination_client_items_per_page: true
+        pagination_partial: false
+        stateless: true
+    swagger:
+        api_keys:
+            JWT:
+                name: Authorization
+                type: header
+    openapi:
+        contact:
+            name: OIMP Platform Team
+            url: https://oimp.io
+            email: api@oimp.io
+        license:
+            name: Proprietary
+        termsOfService: https://oimp.io/terms

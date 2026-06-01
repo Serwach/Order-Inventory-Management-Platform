@@ -1,0 +1,135 @@
+parameters:
+    app.pagination.default_limit: '%env(int:PAGINATION_DEFAULT_LIMIT)%'
+    app.pagination.max_limit: '%env(int:PAGINATION_MAX_LIMIT)%'
+    app.opensearch.dsn: '%env(OPENSEARCH_DSN)%'
+    app.opensearch.index_prefix: '%env(OPENSEARCH_INDEX_PREFIX)%'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        public: false
+        bind:
+            int $defaultPaginationLimit: '%app.pagination.default_limit%'
+            int $maxPaginationLimit: '%app.pagination.max_limit%'
+            string $indexPrefix: '%app.opensearch.index_prefix%'
+            string $env: '%kernel.environment%'
+
+    # ─── Bus handler tagging via _instanceof (not service registration) ───────
+    # Registers the tag on every concrete class that implements the interface,
+    # not on the interface itself (which has no __invoke and can't be a handler).
+    _instanceof:
+        App\Shared\Application\Command\CommandHandlerInterface:
+            tags:
+                - { name: messenger.message_handler, bus: command.bus }
+        App\Shared\Application\Query\QueryHandlerInterface:
+            tags:
+                - { name: messenger.message_handler, bus: query.bus }
+        App\Shared\Application\Event\EventHandlerInterface:
+            tags:
+                - { name: messenger.message_handler, bus: event.bus }
+
+    # ─── Application ─────────────────────────────────────────────────────────
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+            - '../src/**/**/ValueObject/'
+            - '../src/**/**/Event/'
+            - '../src/**/**/Exception/'
+            - '../src/**/**/DTO/'
+            - '../src/**/**/*Interface.php'
+
+    # ─── Infrastructure ───────────────────────────────────────────────────────
+    App\Shared\Infrastructure\Bus\MessengerCommandBus:
+        arguments:
+            $messageBus: '@command.bus'
+
+    App\Shared\Infrastructure\Bus\MessengerQueryBus:
+        arguments:
+            $messageBus: '@query.bus'
+
+    App\Shared\Infrastructure\Messenger\DomainEventDispatchMiddleware:
+        arguments:
+            $eventBus: '@event.bus'
+
+    App\Shared\Infrastructure\Http\CorrelationIdListener:
+        tags:
+            - { name: kernel.event_listener, event: kernel.request, priority: 256 }
+
+    App\Shared\Infrastructure\Http\ApiExceptionListener:
+        tags:
+            - { name: kernel.event_listener, event: kernel.exception, priority: -1 }
+
+    App\Organization\Infrastructure\Security\TenantFilterListener:
+        tags:
+            - { name: kernel.event_listener, event: kernel.request, priority: 8 }
+
+    # ─── OpenSearch ───────────────────────────────────────────────────────────
+    App\Catalog\Infrastructure\Search\OpenSearchClientFactory:
+        arguments:
+            $dsn: '%app.opensearch.dsn%'
+
+    OpenSearch\Client:
+        factory: ['@App\Catalog\Infrastructure\Search\OpenSearchClientFactory', 'create']
+
+    # ─── UI Controllers (must be public for routing) ─────────────────────────
+    App\Organization\UI\Api\AuthController:
+        public: true
+        autowire: true
+        autoconfigure: true
+
+    App\Organization\UI\Api\UserController:
+        public: true
+        autowire: true
+        autoconfigure: true
+
+    App\Order\UI\Api\OrderController:
+        public: true
+        autowire: true
+        autoconfigure: true
+
+    App\Catalog\UI\Api\ProductController:
+        public: true
+        autowire: true
+        autoconfigure: true
+
+    App\Inventory\UI\Api\StockController:
+        public: true
+        autowire: true
+        autoconfigure: true
+
+    App\Shared\Infrastructure\Http\HealthController:
+        public: true
+        autowire: true
+        autoconfigure: true
+
+    # ─── Interfaces → Implementations ────────────────────────────────────────
+    App\Shared\Application\Command\CommandBusInterface:
+        alias: App\Shared\Infrastructure\Bus\MessengerCommandBus
+
+    App\Shared\Application\Query\QueryBusInterface:
+        alias: App\Shared\Infrastructure\Bus\MessengerQueryBus
+
+    App\Organization\Domain\Repository\OrganizationRepositoryInterface:
+        alias: App\Organization\Infrastructure\Doctrine\OrganizationDoctrineRepository
+
+    App\Organization\Domain\Repository\UserRepositoryInterface:
+        alias: App\Organization\Infrastructure\Doctrine\UserDoctrineRepository
+
+    App\Catalog\Domain\Repository\ProductRepositoryInterface:
+        alias: App\Catalog\Infrastructure\Doctrine\ProductDoctrineRepository
+
+    App\Inventory\Domain\Repository\StockEntryRepositoryInterface:
+        alias: App\Inventory\Infrastructure\Doctrine\StockEntryDoctrineRepository
+
+    App\Inventory\Domain\Repository\StockReservationRepositoryInterface:
+        alias: App\Inventory\Infrastructure\Doctrine\StockReservationDoctrineRepository
+
+    App\Order\Domain\Repository\OrderRepositoryInterface:
+        alias: App\Order\Infrastructure\Doctrine\OrderDoctrineRepository
+
+    App\Order\Domain\Service\OrderNumberGeneratorInterface:
+        alias: App\Order\Infrastructure\NumberGenerator\SequentialOrderNumberGenerator

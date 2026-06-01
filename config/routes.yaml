@@ -1,0 +1,34 @@
+api_platform:
+    resource: .
+    type: api_platform
+    prefix: /api
+
+app_health:
+    path: /health
+    controller: App\Shared\Infrastructure\Http\HealthController::check
+    methods: [GET]
+
+app_auth:
+    resource: ../src/Organization/UI/Api/AuthController.php
+    type: attribute
+    prefix: /api/v1
+
+app_users:
+    resource: ../src/Organization/UI/Api/UserController.php
+    type: attribute
+    prefix: /api/v1
+
+app_orders:
+    resource: ../src/Order/UI/Api/OrderController.php
+    type: attribute
+    prefix: /api/v1
+
+app_products:
+    resource: ../src/Catalog/UI/Api/ProductController.php
+    type: attribute
+    prefix: /api/v1
+
+app_inventory:
+    resource: ../src/Inventory/UI/Api/StockController.php
+    type: attribute
+    prefix: /api/v1

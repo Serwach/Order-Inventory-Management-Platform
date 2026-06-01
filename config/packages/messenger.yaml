@@ -1,0 +1,68 @@
+framework:
+    messenger:
+        default_bus: command.bus
+
+        buses:
+            command.bus:
+                middleware:
+                    - doctrine_transaction
+                    - App\Shared\Infrastructure\Messenger\DomainEventDispatchMiddleware
+            query.bus:
+                default_middleware: allow_no_handlers
+            event.bus:
+                default_middleware: allow_no_handlers
+
+        transports:
+            sync:
+                dsn: 'sync://'
+
+            async:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                options:
+                    queues:
+                        oimp_async: ~
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+                    delay: 1000
+                    max_delay: 60000
+
+            async_high:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                options:
+                    queues:
+                        oimp_async_high: ~
+                retry_strategy:
+                    max_retries: 5
+                    multiplier: 2
+                    delay: 500
+
+            failed:
+                dsn: 'doctrine://default?queue_name=failed_messages'
+
+        routing:
+            App\Order\Domain\Event\OrderCreated: async
+            App\Order\Domain\Event\OrderConfirmed: async
+            App\Order\Domain\Event\OrderCancelled: async
+            App\Order\Domain\Event\PaymentConfirmed: async
+            App\Order\Domain\Event\ShipmentCreated: async
+            App\Order\Domain\Event\InvoiceGenerated: async
+            App\Inventory\Domain\Event\InventoryAdjusted: async
+            App\Inventory\Domain\Event\StockReserved: async
+            App\Inventory\Domain\Event\ReservationReleased: async
+            App\Catalog\Domain\Event\ProductCreated: async
+            App\Catalog\Domain\Event\ProductUpdated: async
+            App\Organization\Domain\Event\OrganizationCreated: async
+            App\Organization\Domain\Event\UserRegistered: async
+            App\Organization\Domain\Event\UserInvited: async
+
+when@test:
+    framework:
+        messenger:
+            transports:
+                async:
+                    dsn: 'in-memory://'
+                async_high:
+                    dsn: 'in-memory://'
+                failed:
+                    dsn: 'in-memory://'

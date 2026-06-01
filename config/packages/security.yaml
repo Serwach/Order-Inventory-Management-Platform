@@ -1,0 +1,61 @@
+security:
+    password_hashers:
+        App\Organization\Domain\Entity\User:
+            algorithm: bcrypt
+            cost: 13
+
+    providers:
+        jwt_user_provider:
+            id: App\Organization\Infrastructure\Security\JwtUserProvider
+
+    firewalls:
+        dev:
+            pattern: ^/(_(profiler|wdt)|css|images|js)/
+            security: false
+
+        health:
+            pattern: ^/health
+            security: false
+
+        api_docs:
+            pattern: ^/api/docs
+            security: false
+
+        login:
+            pattern: ^/api/v1/auth/login$
+            stateless: true
+            json_login:
+                check_path: /api/v1/auth/login
+                username_path: email
+                success_handler: lexik_jwt_authentication.handler.authentication_success
+                failure_handler: lexik_jwt_authentication.handler.authentication_failure
+
+        refresh:
+            pattern: ^/api/v1/auth/refresh$
+            stateless: true
+            refresh_jwt: ~
+
+        api:
+            pattern: ^/api
+            stateless: true
+            jwt: ~
+
+    access_control:
+        - { path: ^/api/v1/auth, roles: PUBLIC_ACCESS }
+        - { path: ^/api/docs, roles: PUBLIC_ACCESS }
+        - { path: ^/health, roles: PUBLIC_ACCESS }
+        - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
+
+    role_hierarchy:
+        ROLE_OWNER:
+            - ROLE_ADMIN
+        ROLE_ADMIN:
+            - ROLE_MANAGER
+        ROLE_MANAGER:
+            - ROLE_USER
+
+when@test:
+    security:
+        password_hashers:
+            App\Organization\Domain\Entity\User:
+                algorithm: plaintext

@@ -1,0 +1,24 @@
+framework:
+    cache:
+        prefix_seed: '%kernel.project_dir%/%kernel.environment%'
+        app: cache.adapter.redis
+        system: cache.adapter.filesystem
+        default_redis_provider: '%env(REDIS_URL)%'
+        pools:
+            app.cache.products:
+                adapter: cache.adapter.redis
+                default_lifetime: 3600
+                tags: true
+            app.cache.organizations:
+                adapter: cache.adapter.redis
+                default_lifetime: 1800
+                tags: true
+            app.cache.inventory:
+                adapter: cache.adapter.redis
+                default_lifetime: 60
+                tags: true
+
+when@test:
+    framework:
+        cache:
+            app: cache.adapter.array
